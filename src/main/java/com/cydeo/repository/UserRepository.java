@@ -1,0 +1,15 @@
+package com.cydeo.repository;
+
+import com.cydeo.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByUsername(String username);
+
+    Integer countAllByCompany_TitleAndRole_Description(String companyTitle, String role);
+
+}

@@ -143,7 +143,7 @@ public class InvoiceProductServiceImpl implements InvoiceProductService {
     public void updateRemainingQuantityUponApproval(Long id) {
         Invoice invoice = invoiceRepository.findById(id).get();
         if (invoice.getInvoiceType().equals(InvoiceType.PURCHASE)) {
-            List<Long> InvoiceProductIdList = invoiceProductRepository.getInvoiceProductIdFromInvoiceProduct(id);
+            List<Long> InvoiceProductIdList = invoiceProductRepository.getInvoiceProductIdByInvoiceId(id);
             for (Long each : InvoiceProductIdList) {
                 InvoiceProduct invoiceProduct = invoiceProductRepository.findById(each).get();
                 invoiceProduct.setRemainingQuantity(invoiceProduct.getQuantity());
@@ -154,7 +154,7 @@ public class InvoiceProductServiceImpl implements InvoiceProductService {
                 invoiceProductRepository.save(invoiceProduct);
             }
         } else {
-            List<Long> InvoiceProductIdList = invoiceProductRepository.getInvoiceProductIdFromInvoiceProduct(id);
+            List<Long> InvoiceProductIdList = invoiceProductRepository.getInvoiceProductIdByInvoiceId(id);
             for (Long each : InvoiceProductIdList) {
                 InvoiceProduct invoiceProduct = invoiceProductRepository.findById(each).get();
                 invoiceProduct.setRemainingQuantity(0);
@@ -168,18 +168,17 @@ public class InvoiceProductServiceImpl implements InvoiceProductService {
     }
 
 
-
     @Override
     public void profit(Long id) {
-        List<Long> invoiceProductIdList = invoiceProductRepository.getInvoiceProductIdFromInvoiceProduct(id);
+        List<Long> invoiceProductIdList = invoiceProductRepository.getInvoiceProductIdByInvoiceId(id); // list of invoiceProducts under the approved sales invoice
         Long retrievedProductId;
         Integer retrievedSalesQuantity;
         BigDecimal profitLoss;
-        for (Long eachSale : invoiceProductIdList) {
-            InvoiceProduct invoiceProductSale = invoiceProductRepository.findById(eachSale).orElseThrow();
-            retrievedProductId = invoiceProductRepository.getProductIdByInvoiceProductId(eachSale);
-            retrievedSalesQuantity = invoiceProductSale.getQuantity();
-            profitLoss = invoiceProductRepository.getTotalPerInvoiceProductId(eachSale).subtract(calculatedProfitOrLoss(retrievedProductId, retrievedSalesQuantity));
+        for (Long eachSoldInvoiceProductId : invoiceProductIdList) {
+            InvoiceProduct invoiceProductSale = invoiceProductRepository.findById(eachSoldInvoiceProductId).orElseThrow();
+            retrievedProductId = invoiceProductRepository.getProductIdByInvoiceProductId(eachSoldInvoiceProductId); // product id is found
+            retrievedSalesQuantity = invoiceProductSale.getQuantity(); // get the quantity of the sold product
+            profitLoss = invoiceProductRepository.getTotalPerInvoiceProductId(eachSoldInvoiceProductId).subtract(calculateInitialCostOfGoods(retrievedProductId, retrievedSalesQuantity));
             invoiceProductSale.setProfitLoss(profitLoss);
             invoiceProductRepository.save(invoiceProductSale);
         }
@@ -215,48 +214,48 @@ public class InvoiceProductServiceImpl implements InvoiceProductService {
                 .collect(Collectors.toList());
     }
 
-    public BigDecimal calculatedProfitOrLoss(Long productId, Integer salesQuantity) {
+    public BigDecimal calculateInitialCostOfGoods(Long productId, Integer salesQuantity) {
         List<Long> approvedPurchaseProductIdList = invoiceProductRepository.getApprovedPurchaseInvoiceProductId(companyService.getCompanyDtoByLoggedInUser().getId());
         BigDecimal costOfGoodsSold = BigDecimal.valueOf(0.00);
-        BigDecimal costOfGoodsSoldCumulative = BigDecimal.valueOf(0.00);
+        BigDecimal totalInitialCostOfGoodsSold = BigDecimal.valueOf(0.00);
 
         for (Long eachPurchase : approvedPurchaseProductIdList) {
-            InvoiceProduct invoiceProductPurchase = invoiceProductRepository.findById(eachPurchase).get();
+            InvoiceProduct purchasedInvoiceProduct = invoiceProductRepository.findById(eachPurchase).get();
             if (invoiceProductRepository.getProductIdByInvoiceProductId(eachPurchase) == productId) {
-                if (invoiceProductPurchase.getRemainingQuantity() == 0) {
+                if (purchasedInvoiceProduct.getRemainingQuantity() == 0) {
                     continue;
                 }
-                if (invoiceProductPurchase.getRemainingQuantity() == salesQuantity) {
-                    costOfGoodsSold = invoiceProductPurchase.getPrice().multiply(BigDecimal.valueOf(invoiceProductPurchase.getRemainingQuantity()))
-                            .multiply(BigDecimal.valueOf(invoiceProductPurchase.getTax()))
-                            .divide(BigDecimal.valueOf(100)).add((BigDecimal.valueOf(invoiceProductPurchase.getPrice().doubleValue()))
-                                    .multiply(BigDecimal.valueOf(invoiceProductPurchase.getRemainingQuantity())));
-                    invoiceProductPurchase.setRemainingQuantity(0);
-                    costOfGoodsSoldCumulative = costOfGoodsSoldCumulative.add(costOfGoodsSold);
-                    invoiceProductRepository.save(invoiceProductPurchase);
+                if (purchasedInvoiceProduct.getRemainingQuantity() == salesQuantity) {
+                    costOfGoodsSold = purchasedInvoiceProduct.getPrice().multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getRemainingQuantity()))
+                            .multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getTax()))
+                            .divide(BigDecimal.valueOf(100)).add((BigDecimal.valueOf(purchasedInvoiceProduct.getPrice().doubleValue()))
+                                    .multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getRemainingQuantity())));
+                    purchasedInvoiceProduct.setRemainingQuantity(0);
+                    totalInitialCostOfGoodsSold = totalInitialCostOfGoodsSold.add(costOfGoodsSold);
+                    invoiceProductRepository.save(purchasedInvoiceProduct);
                     break;
-                } else if (invoiceProductPurchase.getRemainingQuantity() > salesQuantity) {
-                    costOfGoodsSold = invoiceProductPurchase.getPrice().multiply(BigDecimal.valueOf(salesQuantity))
-                            .multiply(BigDecimal.valueOf(invoiceProductPurchase.getTax()))
-                            .divide(BigDecimal.valueOf(100)).add((BigDecimal.valueOf(invoiceProductPurchase.getPrice().doubleValue()))
+                } else if (purchasedInvoiceProduct.getRemainingQuantity() > salesQuantity) {
+                    costOfGoodsSold = purchasedInvoiceProduct.getPrice().multiply(BigDecimal.valueOf(salesQuantity))
+                            .multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getTax()))
+                            .divide(BigDecimal.valueOf(100)).add((BigDecimal.valueOf(purchasedInvoiceProduct.getPrice().doubleValue()))
                                     .multiply(BigDecimal.valueOf(salesQuantity)));
-                    invoiceProductPurchase.setRemainingQuantity(invoiceProductPurchase.getRemainingQuantity() - salesQuantity);
-                    costOfGoodsSoldCumulative = costOfGoodsSoldCumulative.add(costOfGoodsSold);
-                    invoiceProductRepository.save(invoiceProductPurchase);
+                    purchasedInvoiceProduct.setRemainingQuantity(purchasedInvoiceProduct.getRemainingQuantity() - salesQuantity);
+                    totalInitialCostOfGoodsSold = totalInitialCostOfGoodsSold.add(costOfGoodsSold);
+                    invoiceProductRepository.save(purchasedInvoiceProduct);
                     break;
                 } else {
-                    costOfGoodsSold = invoiceProductPurchase.getPrice().multiply(BigDecimal.valueOf(invoiceProductPurchase.getRemainingQuantity()))
-                            .multiply(BigDecimal.valueOf(invoiceProductPurchase.getTax()))
-                            .divide(BigDecimal.valueOf(100)).add((BigDecimal.valueOf(invoiceProductPurchase.getPrice().doubleValue()))
-                                    .multiply(BigDecimal.valueOf(invoiceProductPurchase.getRemainingQuantity())));
-                    salesQuantity = salesQuantity - invoiceProductPurchase.getRemainingQuantity();
-                    costOfGoodsSoldCumulative = costOfGoodsSoldCumulative.add(costOfGoodsSold);
-                    invoiceProductPurchase.setRemainingQuantity(0);
-                    invoiceProductRepository.save(invoiceProductPurchase);
+                    costOfGoodsSold = purchasedInvoiceProduct.getPrice().multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getRemainingQuantity()))
+                            .multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getTax()))
+                            .divide(BigDecimal.valueOf(100)).add((BigDecimal.valueOf(purchasedInvoiceProduct.getPrice().doubleValue()))
+                                    .multiply(BigDecimal.valueOf(purchasedInvoiceProduct.getRemainingQuantity())));
+                    salesQuantity = salesQuantity - purchasedInvoiceProduct.getRemainingQuantity();
+                    totalInitialCostOfGoodsSold = totalInitialCostOfGoodsSold.add(costOfGoodsSold);
+                    purchasedInvoiceProduct.setRemainingQuantity(0);
+                    invoiceProductRepository.save(purchasedInvoiceProduct);
                 }
             }
         }
-        return costOfGoodsSoldCumulative;
+        return totalInitialCostOfGoodsSold;
     }
 
 

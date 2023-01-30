@@ -20,7 +20,7 @@ public interface InvoiceProductRepository extends JpaRepository<InvoiceProduct, 
     List<Long> getDistinctProductIdByInvoiceId(Long id);
 
     @Query(value = "SELECT ip.id FROM InvoiceProduct ip WHERE ip.invoice.id = ?1")
-    List<Long> getInvoiceProductIdFromInvoiceProduct(Long id);
+    List<Long> getInvoiceProductIdByInvoiceId(Long id);
 
     @Query(value = "SELECT ((ip.price*ip.quantity)+((ip.price*ip.quantity)*ip.tax)/100) FROM InvoiceProduct ip WHERE ip.id = ?1")
     BigDecimal getTotalPerInvoiceProductId(Long id);

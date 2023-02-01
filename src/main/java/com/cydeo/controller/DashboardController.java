@@ -26,8 +26,8 @@ public class DashboardController {
     @GetMapping("/dashboard")
     public String dashboard(Model model){
         Map<String, BigDecimal> summaryNumbers = Map.of(
-                "totalCost", invoiceService.countTotal(InvoiceType.PURCHASE, InvoiceStatus.APPROVED),
-                "totalSales", invoiceService.countTotal(InvoiceType.SALES, InvoiceStatus.APPROVED),
+                "totalCost", invoiceService.countTotalPurchase(),
+                "totalSales", invoiceService.countTotalSales(),
                 "profitLoss", invoiceService.profitOrLoss()
         );
         model.addAttribute("summaryNumbers", summaryNumbers);

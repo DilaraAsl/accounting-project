@@ -34,83 +34,50 @@ public class InvoiceServiceImpl implements InvoiceService {
     private final CompanyService companyService;
     private final ClientVendorService clientVendorService;
     private final MapperUtil mapperUtil;
-
-
-    public InvoiceServiceImpl(InvoiceRepository invoiceRepository,
-                              InvoiceProductService invoiceProductService, CompanyService companyService,
-                              ClientVendorService clientVendorService, MapperUtil mapperUtil) {
-        this.invoiceRepository = invoiceRepository;
-        this.invoiceProductService = invoiceProductService;
-        this.companyService = companyService;
-        this.clientVendorService = clientVendorService;
-        this.mapperUtil = mapperUtil;
-    }
-
-    public Integer calculateTaxByTaxRate(Integer taxRate, BigDecimal price) {
-        return price.multiply(BigDecimal.valueOf(taxRate).divide(BigDecimal.valueOf(100))).intValue();
-    }
-
     @Override
     public InvoiceDto findById(Long id) {
-        Invoice invoice = invoiceRepository.findById(id)
-                .orElseThrow(() -> new InvoiceNotFoundException("Invoice Not Found"));
-        InvoiceDto invoiceDTO = mapperUtil.convert(invoice, new InvoiceDto());
-
-        if (!invoiceProductService.findTotalPriceWithAndWithoutTax(invoiceDTO.getId()).isEmpty()) {
-            invoiceDTO.setTax(BigDecimal.valueOf(taxOfInvoice(invoiceDTO.getId())));
-            invoiceDTO.setPrice(priceOfInvoiceWithoutTax(invoiceDTO.getId()));
-            invoiceDTO.setTotal(priceOfInvoiceWithTax(invoiceDTO.getId()));
-        }
-        return invoiceDTO;
+        Invoice invoice = invoiceRepository.findById(id).orElseThrow();
+        return mapperUtil.convert(invoice, new InvoiceDto());
     }
 
-    private int taxOfInvoice(Long invoiceId) {
-        return priceOfInvoiceWithTax(invoiceId).intValue() - priceOfInvoiceWithoutTax(invoiceId).intValue();
-    }
-
-    private BigDecimal priceOfInvoiceWithoutTax(Long invoiceId) {
-        List<InvoiceProductDto> invoiceProducts = invoiceProductService.findTotalPriceWithAndWithoutTax(invoiceId);
-        return invoiceProducts.stream().map(invoiceProduct -> invoiceProduct.getPrice().multiply(BigDecimal.valueOf(invoiceProduct.getQuantity())))
-                .reduce(BigDecimal::add).orElse(BigDecimal.ZERO);
-    }
-
-    private BigDecimal priceOfInvoiceWithTax(Long invoiceId) {
-        List<InvoiceProductDto> invoiceProducts = invoiceProductService.findTotalPriceWithAndWithoutTax(invoiceId);
-
-        return invoiceProducts.stream().map(invoiceProductDto -> invoiceProductDto.getTotal()).reduce(BigDecimal::add).get();
-
-    }
-
-    @Override
     public List<InvoiceDto> listAllInvoices() {
+        return invoiceRepository.findAll().stream().map(invoice -> mapperUtil.convert(invoice, new InvoiceDto())).collect(Collectors.toList());
+
+    }
+
+    public List<InvoiceDto> listCompanyInvoices() {
         Long companyId = companyService.getCompanyDtoByLoggedInUser().getId();
-        return invoiceRepository.findAll().stream()
-                .filter(invoice -> invoice.getCompany().getId().equals(companyId))
-                .map(invoice -> mapperUtil.convert(invoice, new InvoiceDto()))
+        return listAllInvoices().stream()
+                .filter(invoiceDto -> invoiceDto.getCompany().getId().equals(companyId))
                 .collect(Collectors.toList());
     }
 
 
-    @Override
-    public List<InvoiceDto> listSalesOrPurchaseInvoices(InvoiceType invoiceType) {
+    public List<InvoiceDto> listPurchaseInvoices() {
 
-        List<InvoiceDto> salesOrPurchase = listAllInvoices().stream()
-                .filter(invoice -> invoice.getInvoiceType().equals(invoiceType))
+        List<InvoiceDto> purchaseList = listCompanyInvoices().stream()
+                .filter(invoice -> invoice.getInvoiceType().equals(InvoiceType.PURCHASE))
                 .collect(Collectors.toList());
-        return calculatePriceAndSortInDescOrder(salesOrPurchase);
+        return calculatePriceAndSortInDescOrder(purchaseList);
     }
 
-    public String findLastRecordedPurchaseInvoice() {
-        InvoiceDto invoiceDto = mapperUtil
-                .convert(invoiceRepository.retrieveLargestPurchaseInvoiceNo(), new InvoiceDto());
+    public List<InvoiceDto> listSalesInvoices() {
+
+        List<InvoiceDto> salesList = listCompanyInvoices().stream()
+                .filter(invoice -> invoice.getInvoiceType().equals(InvoiceType.SALES))
+                .collect(Collectors.toList());
+        return calculatePriceAndSortInDescOrder(salesList);
+    }
+
+    public String findLastRecordedPurchaseInvoice(InvoiceType invoiceType) {
+        InvoiceDto invoiceDto = mapperUtil.convert(invoiceRepository.retrieveLargestSalesInvoiceNo(), new InvoiceDto());
         return invoiceDto.getInvoiceNo();
 
     }
 
     @Override
     public String findLastRecordedSalesInvoice() {
-        InvoiceDto invoiceDto = mapperUtil
-                .convert(invoiceRepository.retrieveLargestSalesInvoiceNo(), new InvoiceDto());
+        InvoiceDto invoiceDto = mapperUtil.convert(invoiceRepository.retrieveLargestSalesInvoiceNo(), new InvoiceDto());
         return invoiceDto.getInvoiceNo();
 
     }
@@ -129,6 +96,83 @@ public class InvoiceServiceImpl implements InvoiceService {
         return "S-" + formatted;
 
     }
+
+
+
+
+
+
+//    public InvoiceDto generateNewSalesInvoiceDto() {
+//        InvoiceDto invoiceDto = new InvoiceDto();
+//
+//        invoiceDto.setInvoiceNo(generateInvoiceNo(InvoiceType.SALES));
+//        invoiceDto.setDate(LocalDate.now());
+//        invoiceDto.setInvoiceType(InvoiceType.SALES);
+//
+//        return invoiceDto;
+//    }
+
+    public List<ClientVendorDto> listCompanyVendors() {
+
+        return clientVendorService.listCompanyVendors()
+                .stream()
+                .filter(clientOrVendor -> clientOrVendor.getClientVendorType().equals(ClientVendorType.VENDOR))
+                .filter(companySelect -> companySelect.getCompany().getId().equals(companyService.getCompanyDtoByLoggedInUser().getId()))
+                .collect(Collectors.toList());
+
+
+    }
+
+    public List<ClientVendorDto> listCompanyClients() {
+
+        return clientVendorService.listCompanyClients()
+                .stream()
+                .filter(clientOrVendor -> clientOrVendor.getClientVendorType().equals(ClientVendorType.CLIENT))
+                .filter(companySelect -> companySelect.getCompany().getId().equals(companyService.getCompanyDtoByLoggedInUser().getId()))
+                .collect(Collectors.toList());
+
+    }
+
+    public InvoiceServiceImpl(InvoiceRepository invoiceRepository,
+                              InvoiceProductService invoiceProductService, CompanyService companyService,
+                              ClientVendorService clientVendorService, MapperUtil mapperUtil) {
+        this.invoiceRepository = invoiceRepository;
+        this.invoiceProductService = invoiceProductService;
+        this.companyService = companyService;
+        this.clientVendorService = clientVendorService;
+        this.mapperUtil = mapperUtil;
+    }
+
+    public Integer calculateTaxByTaxRate(Integer taxRate, BigDecimal price) {
+        return price.multiply(BigDecimal.valueOf(taxRate).divide(BigDecimal.valueOf(100))).intValue();
+    }
+
+
+    private int taxOfInvoice(Long invoiceId) {
+        return priceOfInvoiceWithTax(invoiceId).intValue() - priceOfInvoiceWithoutTax(invoiceId).intValue();
+    }
+
+    private BigDecimal priceOfInvoiceWithoutTax(Long invoiceId) {
+        List<InvoiceProductDto> invoiceProducts = invoiceProductService.findTotalPriceWithAndWithoutTax(invoiceId);
+        return invoiceProducts.stream().map(invoiceProduct -> invoiceProduct.getPrice().multiply(BigDecimal.valueOf(invoiceProduct.getQuantity())))
+                .reduce(BigDecimal::add).orElse(BigDecimal.ZERO);
+    }
+
+    private BigDecimal priceOfInvoiceWithTax(Long invoiceId) {
+        List<InvoiceProductDto> invoiceProducts = invoiceProductService.findTotalPriceWithAndWithoutTax(invoiceId);
+
+        return invoiceProducts.stream().map(invoiceProductDto -> invoiceProductDto.getTotal()).reduce(BigDecimal::add).get();
+
+    }
+
+
+    public String findLastRecordedPurchaseInvoice() {
+        InvoiceDto invoiceDto = mapperUtil
+                .convert(invoiceRepository.retrieveLargestPurchaseInvoiceNo(), new InvoiceDto());
+        return invoiceDto.getInvoiceNo();
+
+    }
+
 
     @Override
     public InvoiceDto generateNewInvoiceDto(InvoiceType invoiceType) {
@@ -201,27 +245,40 @@ public class InvoiceServiceImpl implements InvoiceService {
 
     @Override
     public List<InvoiceDto> calculatePriceAndSortInDescOrder(List<InvoiceDto> invoiceDtoList) {
-        return invoiceDtoList.stream()
-                .sorted(Comparator.comparing(InvoiceDto::getDate).reversed())
-                .peek(invoiceDto ->
-                        {
-                            Long invoiceId = invoiceDto.getId();
-                            List<InvoiceProductDto> invoiceProductList = invoiceProductService.findByInvoiceId(invoiceId);
+            List<InvoiceDto> invoiceList = invoiceDtoList.stream()
+                    .map(invoiceDto ->
 
-                            BigDecimal totalPrice = invoiceProductList.stream().map(invoiceProductDto -> invoiceProductDto.getPrice()
-                                    .multiply(BigDecimal.valueOf(invoiceProductDto.getQuantity()))).reduce(BigDecimal.ZERO, BigDecimal::add);
-                            BigDecimal totalTax = invoiceProductList.stream().map(invoiceProductDto -> invoiceProductDto.getPrice()
-                                            .multiply(BigDecimal.valueOf(invoiceProductDto.getQuantity())).multiply(BigDecimal.valueOf(invoiceProductDto.getTax()))
-                                            .divide(BigDecimal.valueOf(100)))
+                            {
+                                Long invoiceId = invoiceDto.getId();
+                                List<InvoiceProductDto> invoiceProductList = invoiceProductService.findByInvoiceId(invoiceId);
 
-                                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-                            invoiceDto.setPrice(totalPrice);
-                            invoiceDto.setTax(totalTax);
-                            invoiceDto.setTotal(totalPrice.add(totalTax));
-                        }
-                )
-                .collect(Collectors.toList());
-    }
+                                BigDecimal totalPrice = invoiceProductList.stream().map(invoiceProductDto -> invoiceProductDto.getPrice()
+                                        .multiply(BigDecimal.valueOf(invoiceProductDto.getQuantity()))).reduce(BigDecimal.ZERO, BigDecimal::add);
+                                BigDecimal totalTax = invoiceProductList.stream().map(invoiceProductDto -> invoiceProductDto.getPrice()
+                                                .multiply(BigDecimal.valueOf(invoiceProductDto.getQuantity())).multiply(BigDecimal.valueOf(invoiceProductDto.getTax()))
+                                                .divide(BigDecimal.valueOf(100)))
+
+                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+
+                                invoiceDto.setPrice(totalPrice);
+                                invoiceDto.setTax(totalTax);
+                                invoiceDto.setTotal(totalPrice.add(totalTax));
+                                return invoiceDto;
+                            }
+                    ).sorted(Comparator.comparing(invoiceDto -> invoiceNoConverter(invoiceDto.getInvoiceNo())))
+                    .collect(Collectors.toList());
+            return invoiceList.stream().collect(
+                    Collectors.collectingAndThen(
+                            Collectors.toList(),
+                            l -> {
+                                Collections.reverse(l);
+                                return l;
+                            }
+                    )
+            );
+        }
+
 
     @Override
     public List<InvoiceDto> findLastThreeApprovedInvoice() {
@@ -236,15 +293,53 @@ public class InvoiceServiceImpl implements InvoiceService {
 
 
     @Override
-    public BigDecimal countTotal(InvoiceType invoiceType, InvoiceStatus invoiceStatus) {
-        List<InvoiceDto> approvedInvoices = listSalesOrPurchaseInvoices(invoiceType).stream()
-                .filter(invoiceDto -> invoiceDto.getInvoiceStatus().equals(invoiceStatus))
-                .collect(Collectors.toList());
+    public BigDecimal countTotalSales() {
+        List<InvoiceDto> approvedInvoices = getApprovedListOfSalesInvoices();
         BigDecimal totalPrice = BigDecimal.ZERO;
         for (InvoiceDto eachInvoice : approvedInvoices) {
             totalPrice = totalPrice.add(eachInvoice.getTotal());
         }
         return totalPrice;
+    }
+    public BigDecimal countTotalPurchase() {
+        List<InvoiceDto> approvedInvoices = getApprovedListOfPuchaseInvoices();
+        BigDecimal totalPrice = BigDecimal.ZERO;
+        for (InvoiceDto eachInvoice : approvedInvoices) {
+            totalPrice = totalPrice.add(eachInvoice.getTotal());
+        }
+        return totalPrice;
+    }
+public List<InvoiceDto> getApprovedListOfSalesInvoices(){
+    List<InvoiceDto> listApprovedSalesInvoiceInOrder=listSalesInvoices().stream().filter(invoiceDto ->
+                    invoiceDto.getInvoiceStatus().equals(InvoiceStatus.APPROVED))
+            .sorted(Comparator.comparing(invoiceDto -> invoiceDto.getDate()))
+            .collect(Collectors.toList());
+
+    return listApprovedSalesInvoiceInOrder.stream().collect(
+            Collectors.collectingAndThen(
+                    Collectors.toList(),
+                    l -> {
+                        Collections.reverse(l);
+                        return l;
+                    }
+            )
+    );
+}
+    public List<InvoiceDto> getApprovedListOfPuchaseInvoices(){
+        List<InvoiceDto> listApprovedSalesInvoiceInOrder=listPurchaseInvoices().stream().filter(invoiceDto ->
+                        invoiceDto.getInvoiceStatus().equals(InvoiceStatus.APPROVED))
+                .sorted(Comparator.comparing(invoiceDto -> invoiceDto.getDate()))
+                .collect(Collectors.toList());
+
+        return listApprovedSalesInvoiceInOrder.stream().collect(
+                Collectors.collectingAndThen(
+                        Collectors.toList(),
+                        l -> {
+                            Collections.reverse(l);
+                            return l;
+                        }
+                )
+        );
     }
 
     @Override

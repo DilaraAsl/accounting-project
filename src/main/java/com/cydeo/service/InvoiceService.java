@@ -16,7 +16,7 @@ public interface InvoiceService {
     InvoiceDto findById(Long id);
 
     InvoiceDto update(InvoiceDto invoiceDto);
-    BigDecimal countTotal(InvoiceType invoiceType, InvoiceStatus invoiceStatus);
+//    BigDecimal countTotal(InvoiceType invoiceType, InvoiceStatus invoiceStatus);
 
     List<ClientVendorDto> listCompanyClientsOrVendors(ClientVendorType clientVendorType);
 
@@ -26,7 +26,7 @@ public interface InvoiceService {
     void deleteInvoice(Long id);
 
     List<InvoiceDto> listAllInvoices();
-    String generateInvoiceNo(InvoiceType invoiceType);
+
 
     String findLastRecordedPurchaseInvoice();
 
@@ -35,7 +35,8 @@ public interface InvoiceService {
     List<InvoiceDto> calculatePriceAndSortInDescOrder(List<InvoiceDto> invoiceDtoList);
 
     List<InvoiceDto> findLastThreeApprovedInvoice();
-
+    List<InvoiceDto> listSalesInvoices();
+    List<InvoiceDto> listPurchaseInvoices();
 
     Map<String, BigDecimal> getMonthlyProfitLossMap();
 
@@ -44,11 +45,12 @@ public interface InvoiceService {
 
     Integer calculateTaxByTaxRate(Integer taxRate, BigDecimal price);
 
-    List<InvoiceDto> listSalesOrPurchaseInvoices(InvoiceType invoiceType);
+//    List<InvoiceDto> listSalesOrPurchaseInvoices(InvoiceType invoiceType);
 
 
     InvoiceDto saveInvoice(InvoiceDto invoiceDto, InvoiceType invoiceType);
 
     InvoiceDto generateNewInvoiceDto(InvoiceType invoiceType);
-
+    BigDecimal countTotalPurchase();
+    BigDecimal countTotalSales();
 }
